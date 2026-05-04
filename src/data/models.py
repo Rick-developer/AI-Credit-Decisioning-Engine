@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional
+from typing import Optional, Any
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -123,7 +123,7 @@ class CreditDecision(BaseModel):
     threshold_used: float = Field(ge=0, le=1, description="Approval threshold")
 
     # ── SHAP-based explanation ──
-    top_factors: list[dict[str, float]] = Field(
+    top_factors: list[dict[str, Any]] = Field(
         default_factory=list,
         description="Top contributing features with SHAP values"
     )
