@@ -1,0 +1,52 @@
+# ============================================
+# AI Credit Decisioning Engine
+# ============================================
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+
+# --- Virtual Environment ---
+venv/
+.venv/
+env/
+
+# --- IDE ---
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# --- Environment & Secrets ---
+.env
+*.env.local
+
+# --- Notion Automation (contain API token — NEVER push) ---
+notion_ids.json
+create_notion_tracker.py
+find_pages.py
+update_notion_*.py
+
+# --- Generated Data (large files) ---
+data/generated/
+data/models/
+*.pkl
+*.joblib
+
+# --- OS ---
+.DS_Store
+Thumbs.db
+
+# --- Jupyter ---
+.ipynb_checkpoints/
+
+# --- Testing ---
+.pytest_cache/
+htmlcov/
+.coverage
