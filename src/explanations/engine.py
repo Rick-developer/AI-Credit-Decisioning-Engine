@@ -88,9 +88,10 @@ class ExplanationEngine:
                 decision.reason_codes = ["LLM_ERROR"]
         else:
             # Mock mode for testing without API key
-            factors_text = ", ".join([f["feature"] for f in decision.top_factors[:2]])
+            # H-5 FIX: ECOA Reg B requires top 4 specific reason codes per decline
+            factors_text = ", ".join([f["feature"] for f in decision.top_factors[:4]])
             decision.adverse_action_notice = f"[MOCK] Your application was declined primarily due to: {factors_text}."
-            decision.reason_codes = [f["feature"].upper() for f in decision.top_factors[:2]]
+            decision.reason_codes = [f["feature"].upper() for f in decision.top_factors[:4]]
             
         return decision
 
@@ -126,7 +127,7 @@ Key Factors Driving the Denial (from ML SHAP explainer):
 Instructions:
 1. Write a professional, empathetic adverse action notice (max 3 sentences).
 2. Explicitly mention the primary driving factors using clear, consumer-friendly language (do NOT use variable names like 'debt_to_income_ratio' directly, explain what it means).
-3. Generate 1-3 short reason codes (e.g., 'HIGH_DEBT_BURDEN', 'INSUFFICIENT_HISTORY').
+3. Generate exactly 4 short reason codes per ECOA Reg B requirements (e.g., 'HIGH_DEBT_BURDEN', 'INSUFFICIENT_HISTORY', 'EXCESSIVE_OBLIGATIONS', 'LOW_ACCOUNT_AGE').
 
 Return a JSON object with this exact structure:
 {{

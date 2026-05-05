@@ -34,10 +34,11 @@ def test_demographic_parity(fairness_df):
     # SENIOR should have much higher approval rate than YOUNG
     assert age_report.group_results['SENIOR'] > age_report.group_results['YOUNG']
     
-    # Max disparity should be large (likely > 15%), so it should fail
+    # Max disparity should be large, so the 4/5ths rule should FAIL
     assert age_report.max_disparity > 0.15
     assert age_report.passes_threshold == False
     assert "FAILED" in age_report.narrative
+    assert "4/5ths rule" in age_report.narrative
 
 def test_proxy_variable_detection(fairness_df):
     auditor = FairnessAuditor()
@@ -51,5 +52,7 @@ def test_proxy_variable_detection(fairness_df):
             proxy_found = True
             assert p['p_value'] < 0.001
             assert p['max_difference_pct'] > 0.2
+            assert 'eta_squared' in p  # New field from audit fix
+            assert p['eta_squared'] > 0.06  # Medium+ effect size
             
     assert proxy_found

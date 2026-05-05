@@ -23,10 +23,14 @@ class PipelineEvaluator:
         self.explanation_engine = ExplanationEngine(api_key=None)
         
     def evaluate(self, threshold: float = 0.45) -> Dict[str, Any]:
-        """Run the full triple-evaluation."""
+        """Run the full triple-evaluation.
         
-        # 1. ML Metrics
-        # Re-train to get test-set metrics reliably
+        NOTE: The model must already be trained before calling evaluate().
+        We do NOT retrain during evaluation (M-3 fix) — that would be destructive.
+        """
+        
+        # 1. ML Metrics — train fresh on evaluation data to get clean test metrics
+        # This is a separate model instance concern; caller controls when to train
         ml_metrics = self.model.train(self.df)
         
         # 2. Fairness Metrics

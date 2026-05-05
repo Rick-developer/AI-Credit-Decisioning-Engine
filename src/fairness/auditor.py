@@ -26,6 +26,9 @@ class FairnessAuditor:
         """
         reports = []
         
+        # H-7 FIX: Never mutate the caller's DataFrame
+        df_results = df_results.copy()
+        
         # Calculate approvals
         df_results['approved'] = (df_results['risk_score'] <= threshold).astype(int)
         overall_approval_rate = df_results['approved'].mean()
@@ -46,15 +49,19 @@ class FairnessAuditor:
             min_rate = min(rates)
             max_disparity = max_rate - min_rate
             
-            # CBUAE/general industry threshold is often around 0.10 (10 percentage points)
-            # or the 4/5ths rule (min_rate / max_rate >= 0.8)
-            passes_threshold = max_disparity <= 0.15  # Using 15% for synthetic data leniency
+            # H-1 FIX: Use the industry-standard 4/5ths rule (ECOA / EEOC)
+            # Adverse Impact Ratio = min_group_rate / max_group_rate
+            # Must be >= 0.80 to pass (the "80% rule")
+            adverse_impact_ratio = min_rate / max_rate if max_rate > 0 else 0.0
+            passes_fourfifths = adverse_impact_ratio >= 0.80
             
             narrative = (
                 f"Demographic Parity Audit for {protected_attr}: "
-                f"{'PASSED' if passes_threshold else 'FAILED'}. "
+                f"{'PASSED' if passes_fourfifths else 'FAILED'}. "
                 f"Overall approval rate is {overall_approval_rate:.1%}. "
-                f"Maximum disparity between groups is {max_disparity:.1%}. "
+                f"Adverse Impact Ratio: {adverse_impact_ratio:.2f} "
+                f"(threshold: ≥0.80, 4/5ths rule). "
+                f"Max disparity between groups: {max_disparity:.1%}."
             )
             
             reports.append(FairnessReport(
@@ -62,7 +69,7 @@ class FairnessAuditor:
                 protected_attribute=protected_attr,
                 group_results=group_rates,
                 max_disparity=max_disparity,
-                passes_threshold=passes_threshold,
+                passes_threshold=passes_fourfifths,
                 narrative=narrative
             ))
             
@@ -103,17 +110,26 @@ class FairnessAuditor:
                 # If p-value is very small, there's a strong relationship
                 # We also check the effect size (eta squared approx)
                 if p_value < 0.001:
-                    # Calculate max difference in means as a proxy for effect size
+                    # M-4 FIX: Use eta-squared effect size, not just p-value
+                    # With N=5000, nearly everything is significant. Effect size matters more.
+                    ss_between = sum(len(g) * (g.mean() - df[feature].mean())**2 for g in groups)
+                    ss_total = sum((df[feature] - df[feature].mean())**2)
+                    eta_squared = ss_between / ss_total if ss_total > 0 else 0
+                    
+                    # Calculate max difference in means as secondary metric
                     means = df.groupby(protected_attr)[feature].mean()
                     max_diff_pct = (means.max() - means.min()) / max(abs(means.mean()), 0.001)
                     
-                    if max_diff_pct > 0.2: # 20% difference in means
+                    # Require both meaningful effect size AND meaningful difference
+                    if eta_squared > 0.06 and max_diff_pct > 0.2:  # Medium+ effect size
                         proxies.append({
                             "protected_class": protected_attr,
                             "proxy_feature": feature,
                             "p_value": p_value,
+                            "eta_squared": round(eta_squared, 4),
                             "max_difference_pct": max_diff_pct,
-                            "warning": f"Feature '{feature}' may act as a proxy for '{protected_attr}' (Max mean difference: {max_diff_pct:.1%})"
+                            "effect_size": "large" if eta_squared > 0.14 else "medium",
+                            "warning": f"Feature '{feature}' may act as a proxy for '{protected_attr}' (η²={eta_squared:.3f}, max mean diff: {max_diff_pct:.1%})"
                         })
                         
         # Sort by effect size

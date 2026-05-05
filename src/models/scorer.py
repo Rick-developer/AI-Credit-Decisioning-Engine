@@ -4,7 +4,7 @@ import xgboost as xgb
 import shap
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import roc_auc_score, brier_score_loss, precision_score, recall_score
-from typing import Any, Tuple, Dict, List
+from sklearn.calibration import CalibratedClassifierCV
 
 from src.data.models import CreditDecision
 from src.features.engineer import engineer_features
@@ -32,10 +32,13 @@ class CreditRiskModel:
         
         # Protected classes that MUST NOT be used for training
         self.protected_features = ['age_group', 'gender', 'nationality']
-        # IDs and targets that shouldn't be in features
-        self.meta_features = ['applicant_id', 'defaulted', 'requires_bureau_check']
+        # IDs, targets, and derived fields that leak target info or shouldn't be features
+        # NOTE: max_eligible_credit is derived from monthly_income — keeping it
+        #       would redundantly leak income information (audit finding C-3).
+        self.meta_features = ['applicant_id', 'defaulted', 'requires_bureau_check', 'max_eligible_credit']
         
         self.categorical_features = ['employment_type']
+        self.calibrated_model = None
 
     def _prepare_features(self, df: pd.DataFrame, is_training: bool = False) -> pd.DataFrame:
         """Engineer features and drop protected/meta columns."""
@@ -65,29 +68,59 @@ class CreditRiskModel:
                         
         return X
 
-    def train(self, df: pd.DataFrame) -> Dict[str, float]:
+    def train(self, df: pd.DataFrame) -> dict[str, float]:
         """Train the model and return evaluation metrics."""
         X = self._prepare_features(df, is_training=True)
         y = df['defaulted']
         
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
         
+        # H-2 FIX: Handle class imbalance via scale_pos_weight
+        neg_count = int((y_train == 0).sum())
+        pos_count = int((y_train == 1).sum())
+        if pos_count > 0:
+            self.model.set_params(scale_pos_weight=neg_count / pos_count)
+        
         self.model.fit(X_train, y_train)
         
-        # Initialize SHAP explainer
+        # H-3 FIX: Platt scaling calibration for well-calibrated probabilities
+        self.calibrated_model = CalibratedClassifierCV(
+            self.model, cv=5, method='sigmoid'
+        )
+        self.calibrated_model.fit(X_train, y_train)
+        
+        # Initialize SHAP explainer (uses raw model for SHAP, calibrated for predictions)
         self.explainer = shap.TreeExplainer(self.model)
         
-        # Evaluate
-        y_prob = self.model.predict_proba(X_test)[:, 1]
+        # Evaluate using calibrated probabilities
+        y_prob = self.calibrated_model.predict_proba(X_test)[:, 1]
         y_pred = (y_prob > 0.5).astype(int)
+        
+        # H-8 FIX: Add KS and Gini metrics
+        ks_stat = self._compute_ks(y_test, y_prob)
+        gini = 2 * float(roc_auc_score(y_test, y_prob)) - 1
         
         metrics = {
             "auc_roc": float(roc_auc_score(y_test, y_prob)),
+            "gini": gini,
+            "ks_statistic": ks_stat,
             "brier_score": float(brier_score_loss(y_test, y_prob)),
             "precision": float(precision_score(y_test, y_pred, zero_division=0)),
-            "recall": float(recall_score(y_test, y_pred, zero_division=0))
+            "recall": float(recall_score(y_test, y_pred, zero_division=0)),
+            "class_balance": f"{pos_count}/{neg_count} (default/non-default)"
         }
         return metrics
+    
+    @staticmethod
+    def _compute_ks(y_true, y_prob) -> float:
+        """Compute Kolmogorov-Smirnov statistic for model discrimination."""
+        from scipy.stats import ks_2samp
+        prob_default = y_prob[y_true == 1]
+        prob_non_default = y_prob[y_true == 0]
+        if len(prob_default) == 0 or len(prob_non_default) == 0:
+            return 0.0
+        stat, _ = ks_2samp(prob_default, prob_non_default)
+        return float(stat)
 
     def predict_with_explanation(self, df_applicant: pd.DataFrame, threshold: float = 0.45) -> CreditDecision:
         """Predict risk for a single applicant and generate SHAP attributions."""
@@ -105,8 +138,9 @@ class CreditRiskModel:
                     X[col] = 0
             X = X[self.feature_names]
             
-        # Predict
-        prob_default = float(self.model.predict_proba(X)[0, 1])
+        # Predict using calibrated model if available, raw model otherwise
+        predictor = self.calibrated_model if self.calibrated_model else self.model
+        prob_default = float(predictor.predict_proba(X)[0, 1])
         approved = prob_default <= threshold
         
         # SHAP explanation
@@ -135,7 +169,8 @@ class CreditRiskModel:
     def batch_predict(self, df: pd.DataFrame) -> pd.DataFrame:
         """Run predictions on a batch of applicants for fairness testing."""
         X = self._prepare_features(df)
-        probs = self.model.predict_proba(X)[:, 1]
+        predictor = self.calibrated_model if self.calibrated_model else self.model
+        probs = predictor.predict_proba(X)[:, 1]
         
         result_df = df.copy()
         result_df['risk_score'] = probs
