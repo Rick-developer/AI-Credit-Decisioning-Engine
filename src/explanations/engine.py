@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 from src.data.models import Applicant, CreditDecision
 from src.features.engineer import get_feature_definitions
+from src.policy.grounder import PolicyGrounder
 
 class ExplanationResponse(BaseModel):
     """Structured output expected from the LLM."""
@@ -33,6 +34,7 @@ class ExplanationEngine:
             self.client = Groq(api_key=self.api_key)
             
         self.feature_definitions = get_feature_definitions()
+        self.policy_grounder = PolicyGrounder()
 
     def generate_explanation(self, applicant: Applicant, decision: CreditDecision) -> CreditDecision:
         """Generate an adverse action notice based on SHAP values."""
@@ -92,6 +94,9 @@ class ExplanationEngine:
             factors_text = ", ".join([f["feature"] for f in decision.top_factors[:4]])
             decision.adverse_action_notice = f"[MOCK] Your application was declined primarily due to: {factors_text}."
             decision.reason_codes = [f["feature"].upper() for f in decision.top_factors[:4]]
+        
+        # Layer 4: Ground the explanation in CBUAE regulations
+        self.policy_grounder.ground_decision(decision)
             
         return decision
 

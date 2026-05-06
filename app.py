@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 from src.models.scorer import CreditRiskModel
 from src.explanations.engine import ExplanationEngine
 from src.fairness.auditor import FairnessAuditor
+from src.policy.grounder import PolicyGrounder
 from src.data.models import Applicant
 
 # Set page config
@@ -122,7 +123,7 @@ st.markdown("""
 *Hybrid ML+LLM pipeline demonstrating scoring, explainability, and fairness auditing for UAE BNPL applications.*
 """)
 
-tab1, tab2, tab3 = st.tabs(["📊 Individual Decisioning", "🔎 LLM Explanation Layer", "⚖️ Fairness Audit (Layer 3)"])
+tab1, tab2, tab3, tab4 = st.tabs(["📊 Individual Decisioning", "🔎 LLM Explanation Layer", "⚖️ Fairness Audit (Layer 3)", "📜 Regulatory Grounding (Layer 4)"])
 
 with tab1:
     st.subheader(f"Profile: {selected_id}")
@@ -266,3 +267,42 @@ with tab3:
                 st.dataframe(pd.DataFrame(proxies))
             else:
                 st.success("No strong proxy variables detected.")
+
+with tab4:
+    st.subheader("Layer 4: RAG Policy Grounding")
+    st.markdown("""
+    *Every credit explanation is grounded in specific CBUAE regulatory provisions. 
+    This ensures compliance claims are traceable and auditable — not hallucinated by the LLM.*
+    """)
+    
+    # The explanation engine already calls PolicyGrounder internally
+    # Re-run to show the grounded decision
+    with st.spinner("Grounding decision in CBUAE regulations..."):
+        grounded_decision = explanation_engine.generate_explanation(applicant_obj, decision)
+    
+    if grounded_decision.regulatory_citations:
+        st.markdown(f"**{len(grounded_decision.regulatory_citations)} regulatory provision(s) matched:**")
+        
+        for i, citation in enumerate(grounded_decision.regulatory_citations, 1):
+            # Parse the citation format: [ID] Source: Provision
+            bracket_end = citation.index("]") + 1
+            reg_id = citation[1:bracket_end-1]
+            rest = citation[bracket_end:].strip()
+            
+            with st.expander(f"📜 Citation {i}: {reg_id}", expanded=(i == 1)):
+                st.markdown(f"**{rest}**")
+    else:
+        st.info("No regulatory citations matched for this decision.")
+    
+    st.markdown("---")
+    st.markdown("### How It Works")
+    st.markdown("""
+    1. **Extract signals** — Feature names from SHAP and reason codes from the LLM
+    2. **Keyword retrieval** — Match signals against a curated CBUAE regulatory corpus (14 provisions)
+    3. **Rank by relevance** — Score regulations by keyword overlap, return top 3
+    4. **Attach citations** — Populate the `regulatory_citations` field on the decision object
+    
+    > **Design Decision:** We use deterministic keyword retrieval (not vector similarity) because 
+    > the regulatory surface area is bounded. For full semantic RAG, see our 
+    > [UAE Regulatory Compliance RAG Agent](https://github.com/Rick-developer/UAE-Regulatory-Compliance-RAG-Agent).
+    """)
