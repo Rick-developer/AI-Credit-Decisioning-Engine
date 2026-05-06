@@ -2,6 +2,10 @@ import numpy as np
 import pandas as pd
 import xgboost as xgb
 import shap
+import joblib
+import json
+from datetime import datetime, timezone
+from pathlib import Path
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import roc_auc_score, brier_score_loss, precision_score, recall_score
 from sklearn.calibration import CalibratedClassifierCV
@@ -39,6 +43,8 @@ class CreditRiskModel:
         
         self.categorical_features = ['employment_type']
         self.calibrated_model = None
+        self._training_metrics = None
+        self._version = None
 
     def _prepare_features(self, df: pd.DataFrame, is_training: bool = False) -> pd.DataFrame:
         """Engineer features and drop protected/meta columns."""
@@ -109,6 +115,7 @@ class CreditRiskModel:
             "recall": float(recall_score(y_test, y_pred, zero_division=0)),
             "class_balance": f"{pos_count}/{neg_count} (default/non-default)"
         }
+        self._training_metrics = metrics
         return metrics
     
     @staticmethod
@@ -175,3 +182,84 @@ class CreditRiskModel:
         result_df = df.copy()
         result_df['risk_score'] = probs
         return result_df
+
+    def save_model(self, output_dir: str = "data/models", version: str = None) -> str:
+        """Serialize the trained model, calibrator, and metadata to disk.
+        
+        Saves:
+        - model_v{version}.joblib: XGBoost model + calibrated model + SHAP explainer
+        - model_v{version}_manifest.json: Version manifest with hyperparameters,
+          training metrics, feature names, and timestamp
+        
+        Args:
+            output_dir: Directory to save model artifacts.
+            version: Version string (e.g., '1.0'). Auto-generated if not provided.
+            
+        Returns:
+            Path to the saved model file.
+        """
+        if self.model is None:
+            raise RuntimeError("Model must be trained before saving.")
+        
+        if version is None:
+            version = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        
+        self._version = version
+        output_path = Path(output_dir)
+        output_path.mkdir(parents=True, exist_ok=True)
+        
+        # Save model artifacts
+        model_file = output_path / f"model_v{version}.joblib"
+        artifact = {
+            "model": self.model,
+            "calibrated_model": self.calibrated_model,
+            "feature_names": self.feature_names,
+            "protected_features": self.protected_features,
+            "meta_features": self.meta_features,
+        }
+        joblib.dump(artifact, model_file)
+        
+        # Save version manifest
+        manifest = {
+            "version": version,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "algorithm": "XGBoost + CalibratedClassifierCV (Platt scaling)",
+            "hyperparameters": {
+                "max_depth": self.model.get_params().get("max_depth"),
+                "learning_rate": self.model.get_params().get("learning_rate"),
+                "n_estimators": self.model.get_params().get("n_estimators"),
+                "subsample": self.model.get_params().get("subsample"),
+                "colsample_bytree": self.model.get_params().get("colsample_bytree"),
+                "scale_pos_weight": self.model.get_params().get("scale_pos_weight"),
+            },
+            "feature_names": self.feature_names,
+            "protected_features_excluded": self.protected_features,
+            "training_metrics": self._training_metrics,
+        }
+        manifest_file = output_path / f"model_v{version}_manifest.json"
+        with open(manifest_file, "w", encoding="utf-8") as f:
+            json.dump(manifest, f, indent=2, default=str)
+        
+        return str(model_file)
+    
+    @classmethod
+    def load_model(cls, model_path: str) -> "CreditRiskModel":
+        """Load a previously saved model from disk.
+        
+        Args:
+            model_path: Path to the .joblib model file.
+            
+        Returns:
+            A CreditRiskModel instance with the loaded model.
+        """
+        artifact = joblib.load(model_path)
+        
+        instance = cls()
+        instance.model = artifact["model"]
+        instance.calibrated_model = artifact["calibrated_model"]
+        instance.feature_names = artifact["feature_names"]
+        instance.protected_features = artifact["protected_features"]
+        instance.meta_features = artifact["meta_features"]
+        instance.explainer = shap.TreeExplainer(instance.model)
+        
+        return instance

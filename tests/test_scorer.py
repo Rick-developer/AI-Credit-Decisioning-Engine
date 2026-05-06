@@ -44,3 +44,41 @@ def test_protected_classes_dropped(sample_dataset):
     assert 'age_group' not in X.columns
     assert 'applicant_id' not in X.columns
     assert 'defaulted' not in X.columns
+
+
+def test_save_and_load_model(sample_dataset, tmp_path):
+    """Test that a trained model can be saved and loaded with identical predictions."""
+    model = CreditRiskModel()
+    model.train(sample_dataset)
+    
+    # Save
+    model_path = model.save_model(output_dir=str(tmp_path), version="test_1.0")
+    
+    import json
+    from pathlib import Path
+    
+    # Verify files exist
+    assert Path(model_path).exists()
+    manifest_path = tmp_path / "model_vtest_1.0_manifest.json"
+    assert manifest_path.exists()
+    
+    # Verify manifest content
+    with open(manifest_path) as f:
+        manifest = json.load(f)
+    assert manifest["version"] == "test_1.0"
+    assert manifest["algorithm"] == "XGBoost + CalibratedClassifierCV (Platt scaling)"
+    assert manifest["training_metrics"] is not None
+    assert "auc_roc" in manifest["training_metrics"]
+    assert manifest["feature_names"] is not None
+    assert len(manifest["protected_features_excluded"]) == 3
+    
+    # Load and verify identical predictions
+    loaded_model = CreditRiskModel.load_model(model_path)
+    single = sample_dataset.iloc[[0]].copy()
+    
+    original_decision = model.predict_with_explanation(single, threshold=0.45)
+    loaded_decision = loaded_model.predict_with_explanation(single, threshold=0.45)
+    
+    assert abs(original_decision.risk_score - loaded_decision.risk_score) < 1e-6
+    assert original_decision.approved == loaded_decision.approved
+
