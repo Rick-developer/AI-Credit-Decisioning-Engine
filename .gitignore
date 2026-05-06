@@ -32,6 +32,7 @@ notion_ids.json
 create_notion_tracker.py
 find_pages.py
 update_notion_*.py
+rebuild_notion_*.py
 
 # --- Generated Data (large files) ---
 data/generated/
