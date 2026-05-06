@@ -243,15 +243,16 @@ The LLM's role is **strictly translational**. It converts SHAP feature attributi
 
 | Phase | Deliverable | Status |
 |-------|-------------|--------|
-| 1. Scaffolding + PRD | Project structure, PRD.md | 🔨 In Progress |
-| 2. Synthetic Data | 5,000 UAE BNPL applicant records | 🔲 Not Started |
-| 3. Feature Engineering | Engineered risk signals | 🔲 Not Started |
-| 4. ML Scoring | XGBoost + SHAP + threshold optimization | 🔲 Not Started |
-| 5. LLM Explanations | Adverse action notice generator | 🔲 Not Started |
-| 6. Fairness Audit | Bias detection + audit narratives | 🔲 Not Started |
-| 7. Streamlit Dashboard | Interactive demo UI | 🔲 Not Started |
-| 8. Evaluation | Triple evaluation framework | 🔲 Not Started |
-| 9. Documentation | README + case study + Notion 10/10 | 🔲 Not Started |
+| 1. Scaffolding + PRD | Project structure, PRD.md | ✅ Complete |
+| 2. Synthetic Data | 5,000 UAE BNPL applicant records | ✅ Complete |
+| 3. Feature Engineering | Engineered risk signals | ✅ Complete |
+| 4. ML Scoring | XGBoost + SHAP + threshold optimization | ✅ Complete |
+| 5. LLM Explanations | Adverse action notice generator | ✅ Complete |
+| 6. Fairness Audit | Bias detection + audit narratives | ✅ Complete |
+| 7. Streamlit Dashboard | Interactive demo UI | ✅ Complete |
+| 8. Evaluation | Triple evaluation framework | ✅ Complete |
+| 9. Documentation | README + case study + Notion 10/10 | ✅ Complete |
+| 10. Audit Remediation | Security hardening, ML calibration, Layer 4, model card | ✅ Complete |
 
 ---
 

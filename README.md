@@ -19,8 +19,8 @@ Standard ML credit scoring (XGBoost, LightGBM) is commoditized. The **hard probl
 
 | Challenge | Why It Matters |
 |-----------|---------------|
-| ML outputs `P(default) = 0.73` | A compliance officer can't action a probability |
-| SHAP values are for engineers | `feature_3 contributed -0.42` means nothing to a regulator |
+| ML outputs "P(default) = 0.73" | A compliance officer can't action a probability |
+| SHAP values are for engineers | "feature_3 contributed -0.42" means nothing to a regulator |
 | LLMs can hallucinate compliance claims | "Per CBUAE Article 5.2..." — is that even real? |
 | Dropping protected classes ≠ fairness | Models learn proxy variables (age → tenure correlation) |
 
@@ -52,7 +52,7 @@ graph TD
 
 | Layer | Component | What It Does |
 |-------|-----------|-------------|
-| **1** | XGBoost + Platt Scaling | Calibrated `P(default)` with `scale_pos_weight` for class imbalance |
+| **1** | XGBoost + Platt Scaling | Calibrated P(default) with scale_pos_weight for class imbalance |
 | **2** | SHAP → Groq/Llama3 | Translates top SHAP factors into natural language Adverse Action Notices. **The LLM never decides — only explains.** |
 | **3** | Fairness Auditor | 4/5ths rule (AIR ≥ 0.80), proxy variable detection (η² effect size), DataFrame-safe |
 | **4** | Policy Grounder | Grounds every explanation in 14 curated CBUAE regulatory provisions via keyword retrieval |
@@ -62,7 +62,7 @@ graph TD
 ## 🔑 Key Product Decisions
 
 ### 1. "Fairness Through Unawareness" Is Insufficient
-We deliberately drop protected classes (`gender`, `nationality`, `age_group`) to demonstrate this common industry approach — then use Layer 3 to **prove it doesn't work**. The Fairness Auditor detects `employment_tenure_months` as a proxy for `age_group` via ANOVA with η² effect size, showing the model learns to discriminate through correlated features.
+We deliberately drop protected classes (gender, nationality, age_group) to demonstrate this common industry approach — then use Layer 3 to **prove it doesn't work**. The Fairness Auditor detects *employment_tenure_months* as a proxy for *age_group* via ANOVA with η² effect size, showing the model learns to discriminate through correlated features.
 
 ### 2. Bounding LLM Hallucinations
 The LLM receives only the top SHAP factors (mathematically deterministic) and translates them into compliance language. If the LLM fails, the system falls back to template-based reason codes. Layer 4 then grounds the explanation in actual CBUAE regulations — never trusting the LLM's compliance claims.
@@ -112,7 +112,7 @@ AI-Credit-Decisioning-Engine/
 
 ### Prerequisites
 - Python 3.10+
-- `GROQ_API_KEY` for LLM explanations (optional — mock mode available)
+- GROQ_API_KEY for LLM explanations (optional — mock mode available)
 
 ### Installation
 ```bash
@@ -157,8 +157,8 @@ streamlit run app.py
 ## 🔒 Security
 
 - Zero secrets in git history (verified across all commits)
-- All API tokens loaded from `.env` via `python-dotenv`
-- `.gitignore` excludes: `.env`, Notion scripts, model artifacts, generated data
+- All API tokens loaded from .env via python-dotenv
+- .gitignore excludes: .env, Notion scripts, model artifacts, generated data
 
 ---
 
